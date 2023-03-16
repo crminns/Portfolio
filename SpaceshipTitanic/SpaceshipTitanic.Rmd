@@ -1,0 +1,161 @@
+---
+title: "Spaceship Titanic Project"
+author: "Cody Minns"
+date: `r format(Sys.time(), "%d %B, %Y")`
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tree) #trees
+library(gbm) #boosting
+library(splines) #splines
+library(gam) #generalized additive models
+library(Hmisc) #used to impute missing values
+library(mgcv) 
+library(caret) 
+```
+
+```{r}
+ConvertPrediction = function(pred) {
+  pred[pred > 0.5] = 1
+  pred[pred < 0.5] = 0
+  return(pred)
+}
+```
+
+
+```{r}
+#read in data
+train_data = read.csv("train.csv")
+train_Id = train_data$PassengerId
+test_data = read.csv("test.csv")
+test_Id = test_data$PassengerId
+
+train_data[train_data == ""] = NA
+test_data[test_data == ""] = NA
+
+#create predictors
+
+train_data$CabinDeck = rep(NA, nrow(train_data))
+train_data$CabinSide = train_data$CabinDeck
+
+test_data$CabinDeck = rep(NA, nrow(test_data))
+test_data$CabinSide = test_data$CabinDeck
+
+
+for (i in 1:nrow(train_data)) {
+  train_data$CabinDeck[i] = unlist(strsplit(train_data$Cabin[i], "/"))[1]
+  train_data$CabinSide[i] = unlist(strsplit(train_data$Cabin[i], "/"))[3]
+}
+
+for (i in 1:nrow(test_data)) {
+  test_data$CabinDeck[i] = unlist(strsplit(test_data$Cabin[i], "/"))[1]
+  test_data$CabinSide[i] = unlist(strsplit(test_data$Cabin[i], "/"))[3]
+}
+
+#remove predictors that will not be used
+train_data = subset(train_data, select = -c(PassengerId, Name, Cabin))
+test_data = subset(test_data, select = -c(PassengerId, Name, Cabin))
+```
+
+
+```{r}
+#impute missing values for training data
+train_impute = aregImpute(~ HomePlanet + CryoSleep + Destination + Age + VIP + RoomService + FoodCourt + ShoppingMall + Spa + VRDeck + CabinDeck + CabinSide, data = train_data)
+train_imputed = impute.transcan(train_impute, data = train_data, imputation = 1, list.out = TRUE, pr = FALSE, check = FALSE)
+train_imputed = as.data.frame(do.call(cbind,as.list(train_imputed)))
+colnames(train_imputed) = colnames(test_data)
+train_imputed = train_imputed[, colnames(train_data)[colSums(is.na(train_data)) > 0], drop = FALSE]
+```
+
+```{r}
+#impute missing values for test data
+test_impute = aregImpute(~ HomePlanet + CryoSleep + Destination + Age + VIP + RoomService + FoodCourt + ShoppingMall + Spa + VRDeck + CabinDeck + CabinSide, data = test_data)
+test_imputed = impute.transcan(test_impute, data = test_data, imputation = 1, list.out = TRUE, pr = FALSE, check = FALSE)
+test_imputed = as.data.frame(do.call(cbind,as.list(test_imputed)))
+colnames(test_imputed) = colnames(test_data)
+test_imputed = test_imputed[, colnames(test_data)[colSums(is.na(test_data)) > 0], drop = FALSE]
+```
+
+```{r}
+
+#turn categorical predictors into factors and scale numerical predictors
+for (i in 1:(ncol(train_data)-1)) {
+  if (class(train_data[,i]) == "numeric") {
+    train_imputed[,i] = scale(train_imputed[,i])
+  }
+  else {
+    train_imputed[,i] = factor(train_imputed[,i])
+  }
+}
+
+for (i in 1:ncol(test_data)) {
+  if (class(test_data[,i]) == "numeric") {
+    test_imputed[,i] = scale(test_imputed[,i])
+  }
+  else {
+    test_imputed[,i] = factor(test_imputed[,i])
+  }
+}
+
+```
+
+
+```{r}
+
+#convert response to numeric
+train_imputed$Transported = train_data$Transported
+train_imputed$Transported[which(train_imputed$Transported == "True")] = 1
+train_imputed$Transported[which(train_imputed$Transported == "False")] = 0
+
+```
+
+```{r}
+#fit gam to data
+gamModel = train(Transported ~  .,
+                 family = binomial, 
+                 data = train_imputed,
+                 method = "gam",
+                 trControl = trainControl(method = "cv", number = 10),
+                 tuneGrid = data.frame(method = "GCV.Cp", select = FALSE))
+summary(gamModel$finalModel)
+```
+
+
+```{r}
+#make predictions
+gamPred = predict(gamModel, newdata = test_imputed, type = "prob")
+pred = rep(NA, nrow(gamPred))
+for (i in 1:nrow(gamPred)) {
+  if (gamPred[i,1] > gamPred[i,2]) {pred[i] = toString(0)}
+  else {pred[i] = toString(1)}
+}
+pred = cbind(test_Id, pred)
+colnames(pred) = c("PassengerId","Transported")
+pred[,2] = replace(pred[,2], which(pred[,2] == 1), "True")
+pred[,2] = replace(pred[,2], which(pred[,2] == 0), "False")
+
+#write.csv(pred, "SpaceshipTitanicsubmission.csv", row.names = F)
+
+```
+
+
+```{r}
+
+#find optimal boosted model using 10-fold cross validation (not shown)
+#then fit optimal boosted model
+boosted = gbm(Transported ~ ., data = train_imputed, distribution = "bernoulli", n.trees = 68795, shrinkage = 0.001) #create boosted model
+preds = predict(boosted, test_imputed, type = "response") #make predictions
+preds = ConvertPrediction(preds)
+
+preds = cbind(test_Id,preds)
+colnames(preds) = c("PassengerId","Transported")
+preds[,2] = replace(preds[,2], which(preds[,2] == 1), "True")
+preds[,2] = replace(preds[,2], which(preds[,2] == 0), "False")
+
+write.csv(preds, "SpaceshipTitanicsubmission.csv", row.names = F)
+
+```
+
+
