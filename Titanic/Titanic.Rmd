@@ -1,0 +1,79 @@
+---
+title: "Titanic Project"
+author: "Cody Minns"
+date: "2023-01-09"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tree) #trees
+library(gbm) #boosting
+library(splines) #splines
+library(gam) #generalized additive models
+library(Hmisc) #used to impute missing values
+```
+
+```{r}
+ConvertPrediction = function(pred) {
+  pred[pred > 0.5] = 1
+  pred[pred < 0.5] = 0
+  return(pred)
+}
+```
+
+
+```{r}
+#read in data
+train_data = read.csv("train.csv")
+train_Id = train_data$PassengerId
+train_data = subset(train_data, select = -c(PassengerId, Name, Ticket, Cabin))
+test_data = read.csv("test.csv")
+test_Id = test_data$PassengerId
+test_data = subset(test_data, select = -c(PassengerId, Name, Ticket, Cabin))
+
+#prepare data
+npred = ncol(train_data)
+num_pred_i = c(4,5,6,7)
+cat_pred_i = 2:npred
+cat_pred_i = cat_pred_i[-(num_pred_i-1)]
+
+#turn categorical predictors into factors
+for (i in cat_pred_i) {
+  train_data[,i] = factor(train_data[,i])
+  test_data[,i-1] = factor(test_data[,i-1])
+}
+
+```
+
+```{r}
+#fit gam to data
+SurvivalModel1 = gam(Survived ~ Pclass * Sex + ns(Age, df = 4) + ns(SibSp, df = 4) + Embarked, family = binomial, data = train_data)
+summary(SurvivalModel1)
+```
+```{r}
+#make predictions
+Predictions1 = predict(SurvivalModel1, newdata = test_data, type = "response")
+Predictions1 = cbind(test_Id,ConvertPrediction(Predictions1))
+colnames(Predictions1) = c("PassengerId","Survived")
+write.csv(Predictions1, "Titanicsubmission.csv", row.names = F)
+
+```
+
+
+```{r}
+
+#create variable to store boosted training MSE
+
+boosted = gbm(Survived ~ ., data = train_data, distribution = "gaussian", n.trees = 12875, shrinkage = 0.001) #create model
+preds = predict(boosted, test_data, type = "response") #make predictions
+preds = ConvertPrediction(preds)
+
+preds = cbind(test_Id,preds)
+colnames(preds) = c("PassengerId","Survived")
+
+write.csv(preds, "Titanicsubmission.csv", row.names = F)
+
+```
+
+
