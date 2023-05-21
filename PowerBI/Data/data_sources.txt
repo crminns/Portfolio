@@ -1,0 +1,19 @@
+"federal_reserve_interest_rates.xlsx" -- Federal Reserve Interest Rates, 1954 - present from Kaggle
+
+https://www.kaggle.com/datasets/federalreserve/interest-rates
+
+"housing_prices_by_region.xls" -- Historical Housing Price Data from US Census Bureau
+
+https://www.census.gov/construction/nrs/historical_data/index.html
+
+"mortgage_rates.xlsx" -- 30-Year Conventional Mortgage Rate Data from Federal Reserve
+
+https://www.kaggle.com/datasets/federalreserve/30-year-conventional-mortgage-rate
+
+"US_CPI.xlsx" -- US CPI Inflation from 1913 - 2022 from Kaggle
+
+https://www.kaggle.com/datasets/varpit94/us-inflation-data-updated-till-may-2021
+
+"world_inflation.xlsx" -- World inflation dataset from Kaggle
+
+https://www.kaggle.com/datasets/belayethossainds/global-inflation-dataset-212-country-19702022
