@@ -1,6 +1,3 @@
-import os
-os.chdir(r"C:\Users\crmin\OneDrive\Desktop\Professional & School Stuff\Job Stuff\ETL Example")
-
 ## This is a DAG designed to extract data from several different types of files then
 ## transform and merge the data into one CSV file. This is done by defining the various tasks
 ## required, then creating a data pipeline using these tasks.
